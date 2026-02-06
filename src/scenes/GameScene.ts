@@ -70,6 +70,9 @@ export class GameScene extends Phaser.Scene {
   // Gimmicks
   private gimmicks!: GimmickManager;
 
+  // UI input guard: prevents grapple fire on the same click that closes a UI
+  private uiJustClosed = false;
+
   // Input
   private keyW!: Phaser.Input.Keyboard.Key;
   private keyA!: Phaser.Input.Keyboard.Key;
@@ -397,8 +400,12 @@ export class GameScene extends Phaser.Scene {
 
     // Mouse click: fire/release grapple
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      // UIが開いている間はゲーム入力を無視
+      // UIが開いている or 直前に閉じた場合はゲーム入力を無視
       if (this.evoSelectUI.isVisible() || this.encyclopediaUI.isVisible()) return;
+      if (this.uiJustClosed) {
+        this.uiJustClosed = false;
+        return;
+      }
 
       if (this.isDead) {
         this.restartGame();
@@ -779,6 +786,7 @@ export class GameScene extends Phaser.Scene {
         this.evoSelectUI.show(() => {
           // After selection, clamp HP to new max
           this.playerHP = Math.min(this.playerHP, this.stats.maxHp);
+          this.uiJustClosed = true;
         });
         break;
       }
