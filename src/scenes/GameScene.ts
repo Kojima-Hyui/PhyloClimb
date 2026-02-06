@@ -1,5 +1,13 @@
 import Phaser from 'phaser';
 import * as C from '../constants';
+import * as Stage from '../data/stageData';
+import { EvolutionSystem } from '../systems/EvolutionSystem';
+import { PlayerStats } from '../systems/PlayerStats';
+import { EvolutionSelectUI } from '../ui/EvolutionSelectUI';
+import { EncyclopediaSystem } from '../systems/EncyclopediaSystem';
+import { EncyclopediaUI } from '../ui/EncyclopediaUI';
+import { GimmickManager } from '../systems/GimmickManager';
+import { evolutionTree, ALL_NODE_IDS } from '../data/evolutionTree';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const MatterLib = (Phaser.Physics.Matter as any).Matter as typeof MatterJS;
@@ -18,7 +26,19 @@ interface RecoveryPoint {
   used: boolean;
 }
 
+interface EvoItem {
+  x: number;
+  y: number;
+  graphics: Phaser.GameObjects.Arc;
+  glow: Phaser.GameObjects.Arc;
+  collected: boolean;
+}
+
 export class GameScene extends Phaser.Scene {
+  // Systems
+  private evo!: EvolutionSystem;
+  private stats!: PlayerStats;
+
   // Player
   private player!: Phaser.Physics.Matter.Sprite;
   private playerHP: number = C.MAX_HP;
@@ -40,6 +60,15 @@ export class GameScene extends Phaser.Scene {
   // Stage
   private hookPoints: HookPoint[] = [];
   private recoveryPoints: RecoveryPoint[] = [];
+  private evoItems: EvoItem[] = [];
+
+  // UI
+  private evoSelectUI!: EvolutionSelectUI;
+  private encyclopediaSystem!: EncyclopediaSystem;
+  private encyclopediaUI!: EncyclopediaUI;
+
+  // Gimmicks
+  private gimmicks!: GimmickManager;
 
   // Input
   private keyW!: Phaser.Input.Keyboard.Key;
@@ -56,14 +85,19 @@ export class GameScene extends Phaser.Scene {
   private heightBar!: Phaser.GameObjects.Graphics;
   private heightText!: Phaser.GameObjects.Text;
   private controlsText!: Phaser.GameObjects.Text;
+  private evoIcons!: Phaser.GameObjects.Graphics;
 
   constructor() {
     super({ key: 'GameScene' });
   }
 
   create() {
+    // Systems
+    this.evo = new EvolutionSystem();
+    this.stats = new PlayerStats(this.evo);
+
     // Reset state
-    this.playerHP = C.MAX_HP;
+    this.playerHP = this.stats.maxHp;
     this.isDead = false;
     this.grappleState = 'idle';
     this.grappleConstraint = null;
@@ -72,6 +106,9 @@ export class GameScene extends Phaser.Scene {
     this.wasGrounded = true;
     this.hookPoints = [];
     this.recoveryPoints = [];
+    this.evoItems = [];
+    this.evoSelectUI = new EvolutionSelectUI(this, this.evo);
+    this.encyclopediaSystem = new EncyclopediaSystem();
 
     // Background
     this.createBackground();
@@ -81,8 +118,17 @@ export class GameScene extends Phaser.Scene {
     this.createPlatforms();
     this.createHookPoints();
     this.createRecoveryPoints();
+    this.createEvoItems();
     this.createGoal();
     this.createDeathZone();
+
+    // Gimmicks
+    this.gimmicks = new GimmickManager(this, () => this.releaseGrapple());
+
+    // Add fake hooks to hookPoints so findBestHook finds them
+    for (const fh of this.gimmicks.fakeHooks.getHookPoints()) {
+      this.hookPoints.push(fh);
+    }
 
     // Player
     this.createPlayer();
@@ -104,11 +150,14 @@ export class GameScene extends Phaser.Scene {
     // HUD
     this.createHUD();
 
+    // Encyclopedia UI
+    this.encyclopediaUI = new EncyclopediaUI(this, this.encyclopediaSystem);
+
     // Cursor
     this.input.setDefaultCursor('crosshair');
   }
 
-  update(_time: number, delta: number) {
+  update(time: number, delta: number) {
     if (this.isDead) return;
 
     this.handleSpaceKey();
@@ -118,6 +167,11 @@ export class GameScene extends Phaser.Scene {
     this.drawAimIndicator();
     this.updateHookVisuals();
     this.trackFalling();
+
+    // Gimmick updates
+    const body = this.player.body as MatterJS.BodyType;
+    this.gimmicks.update(time, body, this.player.x, this.player.y);
+    this.gimmicks.updateVisuals(this.player.x, this.player.y, this.stats.grappleRange);
     this.updateHUD();
   }
 
@@ -175,21 +229,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   private createPlatforms() {
-    const platforms = [
-      { x: 400, y: 3850, w: 300, h: 20 }, // Start
-      { x: 200, y: 3400, w: 130, h: 16 },
-      { x: 600, y: 3000, w: 130, h: 16 },
-      { x: 350, y: 2550, w: 130, h: 16 },
-      { x: 200, y: 2050, w: 150, h: 16 }, // Recovery 1
-      { x: 600, y: 1550, w: 130, h: 16 },
-      { x: 350, y: 1050, w: 150, h: 16 }, // Recovery 2
-      { x: 550, y: 600, w: 130, h: 16 },
-      { x: 400, y: 200, w: 300, h: 20 }, // Goal
-    ];
-
     const gfx = this.add.graphics().setDepth(1);
 
-    for (const p of platforms) {
+    for (const p of Stage.platforms) {
       this.matter.add.rectangle(p.x, p.y, p.w, p.h, {
         isStatic: true,
         label: 'platform',
@@ -206,41 +248,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private createHookPoints() {
-    const hooks = [
-      // Section 1: Start → first rest
-      { x: 300, y: 3650 },
-      { x: 550, y: 3580 },
-      // Section 2
-      { x: 150, y: 3200 },
-      { x: 450, y: 3150 },
-      // Section 3
-      { x: 650, y: 2800 },
-      { x: 300, y: 2750 },
-      // Section 4
-      { x: 200, y: 2350 },
-      { x: 550, y: 2300 },
-      // Section 5
-      { x: 500, y: 2100 },
-      { x: 250, y: 1900 },
-      // Section 6
-      { x: 350, y: 1750 },
-      { x: 600, y: 1650 },
-      // Section 7
-      { x: 150, y: 1350 },
-      { x: 500, y: 1300 },
-      // Section 8
-      { x: 600, y: 1100 },
-      { x: 250, y: 950 },
-      // Section 9
-      { x: 450, y: 800 },
-      { x: 200, y: 700 },
-      // Section 10: Near goal
-      { x: 550, y: 480 },
-      { x: 300, y: 380 },
-      { x: 450, y: 280 },
-    ];
-
-    for (const h of hooks) {
+    for (const h of Stage.hookPoints) {
       const glow = this.add.circle(h.x, h.y, 14, C.COLOR_HOOK, 0.15).setDepth(4);
       const circle = this.add.circle(h.x, h.y, 8, C.COLOR_HOOK, 0.7).setDepth(5);
 
@@ -260,12 +268,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private createRecoveryPoints() {
-    const points = [
-      { x: 200, y: 2020 },
-      { x: 350, y: 1020 },
-    ];
-
-    for (const r of points) {
+    for (const r of Stage.recoveryPoints) {
       const gfx = this.add.graphics().setDepth(5);
       // Cross icon
       gfx.fillStyle(C.COLOR_RECOVERY, 0.8);
@@ -283,6 +286,41 @@ export class GameScene extends Phaser.Scene {
       });
 
       this.recoveryPoints.push({ x: r.x, y: r.y, graphics: gfx, used: false });
+    }
+  }
+
+  private createEvoItems() {
+    for (const e of Stage.evolutionItems) {
+      const glow = this.add.circle(e.x, e.y, 18, C.COLOR_EVO_ITEM, 0.15).setDepth(4);
+      const circle = this.add.circle(e.x, e.y, 10, C.COLOR_EVO_ITEM, 0.8).setDepth(5);
+
+      // Float animation
+      this.tweens.add({
+        targets: [circle, glow],
+        y: e.y - 6,
+        duration: 1500,
+        ease: 'Sine.easeInOut',
+        yoyo: true,
+        repeat: -1,
+      });
+
+      // Glow pulse
+      this.tweens.add({
+        targets: glow,
+        alpha: { from: 0.1, to: 0.35 },
+        duration: 1000,
+        yoyo: true,
+        repeat: -1,
+      });
+
+      // Sensor
+      this.matter.add.rectangle(e.x, e.y, 36, 36, {
+        isStatic: true,
+        isSensor: true,
+        label: 'evoitem',
+      });
+
+      this.evoItems.push({ x: e.x, y: e.y, graphics: circle, glow, collected: false });
     }
   }
 
@@ -399,14 +437,20 @@ export class GameScene extends Phaser.Scene {
 
         const other = isA ? pair.bodyB : pair.bodyA;
 
-        if (other.label === 'platform') {
+        if (other.label === 'platform' || other.label === 'breakable') {
           // Only count as ground if player is above the platform
           if (playerBody.position.y < other.position.y) {
             this.groundContacts++;
           }
+          if (other.label === 'breakable') {
+            this.gimmicks.breakables.onPlayerContact(other);
+          }
         }
         if (other.label === 'recovery') {
           this.handleRecoveryPickup(other);
+        }
+        if (other.label === 'evoitem') {
+          this.handleEvoItemPickup(other);
         }
         if (other.label === 'goal') {
           this.handleVictory();
@@ -427,8 +471,11 @@ export class GameScene extends Phaser.Scene {
 
         const other = isA ? pair.bodyB : pair.bodyA;
 
-        if (other.label === 'platform') {
+        if (other.label === 'platform' || other.label === 'breakable') {
           this.groundContacts = Math.max(0, this.groundContacts - 1);
+          if (other.label === 'breakable') {
+            this.gimmicks.breakables.onPlayerLeave(other);
+          }
         }
       }
     });
@@ -439,7 +486,7 @@ export class GameScene extends Phaser.Scene {
   private handleMovement() {
     const body = this.player.body as MatterJS.BodyType;
     const grounded = this.groundContacts > 0;
-    const force = grounded ? C.PLAYER_MOVE_FORCE : C.PLAYER_AIR_CONTROL;
+    const force = grounded ? C.PLAYER_MOVE_FORCE : this.stats.airControl;
 
     if (this.keyA.isDown || this.cursors.left.isDown) {
       this.player.applyForce(new Phaser.Math.Vector2(-force, 0));
@@ -461,8 +508,14 @@ export class GameScene extends Phaser.Scene {
     if (!Phaser.Input.Keyboard.JustDown(this.keySpace)) return;
 
     if (this.grappleState === 'attached') {
-      // Release grapple with upward boost
-      this.player.applyForce(new Phaser.Math.Vector2(0, -0.025));
+      // Release grapple with upward boost + momentum retention bonus
+      const body = this.player.body as MatterJS.BodyType;
+      const boostY = -0.025;
+      const momentumBonus = this.stats.momentumRetention;
+      this.player.applyForce(new Phaser.Math.Vector2(
+        body.velocity.x * momentumBonus * 0.01,
+        boostY
+      ));
       this.releaseGrapple();
     } else if (this.groundContacts > 0) {
       // Jump
@@ -486,7 +539,7 @@ export class GameScene extends Phaser.Scene {
 
     for (const hook of this.hookPoints) {
       const dist = Phaser.Math.Distance.Between(px, py, hook.x, hook.y);
-      if (dist > C.GRAPPLE_RANGE) continue;
+      if (dist > this.stats.grappleRange) continue;
 
       const hookAngle = Math.atan2(hook.y - py, hook.x - px);
       let angleDiff = Math.abs(hookAngle - aimAngle);
@@ -526,6 +579,9 @@ export class GameScene extends Phaser.Scene {
     } as any);
 
     MatterLib.Composite.add(this.matter.world.engine.world as any, this.grappleConstraint);
+
+    // Notify fake hook system
+    this.gimmicks.fakeHooks.onGrappleAttach(hook.x, hook.y);
   }
 
   private releaseGrapple() {
@@ -535,6 +591,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.grappleTarget = null;
     this.grappleState = 'idle';
+    this.gimmicks?.fakeHooks.onGrappleRelease();
   }
 
   private reelIn(amount: number) {
@@ -545,14 +602,14 @@ export class GameScene extends Phaser.Scene {
 
   private reelOut(amount: number) {
     if (!this.grappleConstraint) return;
-    this.ropeLength = Math.min(C.GRAPPLE_RANGE, this.ropeLength + amount);
+    this.ropeLength = Math.min(this.stats.grappleRange, this.ropeLength + amount);
     this.grappleConstraint.length = this.ropeLength;
   }
 
   private handleGrappleReel(delta: number) {
     if (this.grappleState !== 'attached') return;
 
-    const amount = C.REEL_SPEED * (delta / 16.67);
+    const amount = this.stats.reelSpeed * (delta / 16.67);
     if (this.keyW.isDown || this.cursors.up.isDown) {
       this.reelIn(amount);
     }
@@ -606,7 +663,7 @@ export class GameScene extends Phaser.Scene {
 
     for (const hook of this.hookPoints) {
       const dist = Phaser.Math.Distance.Between(px, py, hook.x, hook.y);
-      if (dist <= C.GRAPPLE_RANGE) {
+      if (dist <= this.stats.grappleRange) {
         hook.graphics.setFillStyle(C.COLOR_HOOK_IN_RANGE, 1);
         hook.graphics.setScale(1.3);
         hook.glow.setAlpha(0.3);
@@ -631,7 +688,7 @@ export class GameScene extends Phaser.Scene {
 
     if (grounded && !this.wasGrounded) {
       const fallDistance = this.player.y - this.peakY;
-      if (fallDistance > C.FALL_THRESHOLD_SMALL) {
+      if (fallDistance > this.stats.fallThresholdSmall) {
         this.applyFallDamage(fallDistance);
       }
     }
@@ -651,18 +708,18 @@ export class GameScene extends Phaser.Scene {
   private applyFallDamage(fallPixels: number) {
     let damage: number;
 
-    if (fallPixels < C.FALL_THRESHOLD_MEDIUM) {
-      const t = (fallPixels - C.FALL_THRESHOLD_SMALL) / (C.FALL_THRESHOLD_MEDIUM - C.FALL_THRESHOLD_SMALL);
+    if (fallPixels < this.stats.fallThresholdMedium) {
+      const t = (fallPixels - this.stats.fallThresholdSmall) / (this.stats.fallThresholdMedium - this.stats.fallThresholdSmall);
       damage = 5 + t * 5;
-    } else if (fallPixels < C.FALL_THRESHOLD_LARGE) {
-      const t = (fallPixels - C.FALL_THRESHOLD_MEDIUM) / (C.FALL_THRESHOLD_LARGE - C.FALL_THRESHOLD_MEDIUM);
+    } else if (fallPixels < this.stats.fallThresholdLarge) {
+      const t = (fallPixels - this.stats.fallThresholdMedium) / (this.stats.fallThresholdLarge - this.stats.fallThresholdMedium);
       damage = 10 + t * 25;
     } else {
-      const t = Math.min(1, (fallPixels - C.FALL_THRESHOLD_LARGE) / 400);
+      const t = Math.min(1, (fallPixels - this.stats.fallThresholdLarge) / 400);
       damage = 35 + t * 65;
     }
 
-    damage = Math.round(damage);
+    damage = Math.round(damage * this.stats.fallDamageMultiplier);
     this.playerHP = Math.max(0, this.playerHP - damage);
 
     // Screen shake
@@ -691,12 +748,34 @@ export class GameScene extends Phaser.Scene {
         rp.graphics.setAlpha(0.15);
 
         const prev = this.playerHP;
-        this.playerHP = Math.min(C.MAX_HP, this.playerHP + C.RECOVERY_AMOUNT);
+        this.playerHP = Math.min(this.stats.maxHp, this.playerHP + C.RECOVERY_AMOUNT);
         const healed = this.playerHP - prev;
 
         if (healed > 0) {
           this.spawnFloatingText(this.player.x, this.player.y - 30, `+${healed}`, '#44ff44');
         }
+        break;
+      }
+    }
+  }
+
+  private handleEvoItemPickup(sensorBody: MatterJS.BodyType) {
+    for (const ei of this.evoItems) {
+      if (ei.collected) continue;
+      const dist = Phaser.Math.Distance.Between(sensorBody.position.x, sensorBody.position.y, ei.x, ei.y);
+      if (dist < 40) {
+        ei.collected = true;
+        ei.graphics.setAlpha(0);
+        ei.glow.setAlpha(0);
+
+        // Show floating text
+        this.spawnFloatingText(this.player.x, this.player.y - 30, '進化!', '#88ff88');
+
+        // Open evolution selection UI
+        this.evoSelectUI.show(() => {
+          // After selection, clamp HP to new max
+          this.playerHP = Math.min(this.playerHP, this.stats.maxHp);
+        });
         break;
       }
     }
@@ -723,6 +802,7 @@ export class GameScene extends Phaser.Scene {
     if (this.isDead) return;
     this.isDead = true;
     this.releaseGrapple();
+    this.encyclopediaSystem.recordRun(this.evo.getUnlocked(), false, 0);
 
     this.player.setTint(0xff0000);
     this.cameras.main.shake(300, 0.02);
@@ -753,6 +833,7 @@ export class GameScene extends Phaser.Scene {
     if (this.isDead) return;
     this.isDead = true;
     this.releaseGrapple();
+    this.encyclopediaSystem.recordRun(this.evo.getUnlocked(), true, this.playerHP);
 
     this.add
       .text(C.GAME_WIDTH / 2, C.GAME_HEIGHT / 2 - 50, 'CLEAR!', {
@@ -767,7 +848,7 @@ export class GameScene extends Phaser.Scene {
       .setScrollFactor(0);
 
     this.add
-      .text(C.GAME_WIDTH / 2, C.GAME_HEIGHT / 2 + 10, `HP remaining: ${this.playerHP}/${C.MAX_HP}`, {
+      .text(C.GAME_WIDTH / 2, C.GAME_HEIGHT / 2 + 10, `HP remaining: ${this.playerHP}/${this.stats.maxHp}`, {
         fontSize: '20px',
         color: '#ffffff',
       })
@@ -805,8 +886,10 @@ export class GameScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(91);
 
+    this.evoIcons = this.add.graphics().setScrollFactor(0).setDepth(90);
+
     this.controlsText = this.add
-      .text(C.GAME_WIDTH / 2, C.GAME_HEIGHT - 12, 'Click: Grapple | W/S: Reel | A/D: Move | Space: Jump/Release | R: Restart', {
+      .text(C.GAME_WIDTH / 2, C.GAME_HEIGHT - 12, 'Click: Grapple | W/S: Reel | A/D: Move | Space: Jump/Release | Tab: 図鑑 | R: Restart', {
         fontSize: '11px',
         color: '#ffffff',
       })
@@ -827,7 +910,7 @@ export class GameScene extends Phaser.Scene {
     this.hpBar.fillStyle(0x000000, 0.5);
     this.hpBar.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
 
-    const ratio = this.playerHP / C.MAX_HP;
+    const ratio = this.playerHP / this.stats.maxHp;
     let color = 0x44ff44;
     if (ratio < 0.3) color = 0xff4444;
     else if (ratio < 0.6) color = 0xffaa44;
@@ -838,7 +921,7 @@ export class GameScene extends Phaser.Scene {
     this.hpBar.lineStyle(1, 0xffffff, 0.3);
     this.hpBar.strokeRect(barX, barY, barW, barH);
 
-    this.hpText.setText(`HP ${this.playerHP}/${C.MAX_HP}`);
+    this.hpText.setText(`HP ${this.playerHP}/${this.stats.maxHp}`);
 
     // Height bar
     this.heightBar.clear();
@@ -862,5 +945,26 @@ export class GameScene extends Phaser.Scene {
 
     this.heightText.setText(`${Math.round(height)}m`);
     this.heightText.setY(Math.max(hy + 15, hy + hh * (1 - hRatio) - 8));
+
+    // Evolution icons
+    this.evoIcons.clear();
+    const iconY = 42;
+    const iconStartX = 15;
+    const iconSize = 7;
+    const iconGap = 18;
+
+    for (let i = 0; i < ALL_NODE_IDS.length; i++) {
+      const nodeId = ALL_NODE_IDS[i];
+      const node = evolutionTree[nodeId];
+      const ix = iconStartX + i * iconGap;
+
+      if (this.evo.isUnlocked(nodeId)) {
+        this.evoIcons.fillStyle(node.color, 0.9);
+        this.evoIcons.fillCircle(ix, iconY, iconSize);
+      } else {
+        this.evoIcons.lineStyle(1, 0x555555, 0.4);
+        this.evoIcons.strokeCircle(ix, iconY, iconSize);
+      }
+    }
   }
 }

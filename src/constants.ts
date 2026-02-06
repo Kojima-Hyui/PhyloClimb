@@ -37,3 +37,18 @@ export const COLOR_WALL = 0x333355;
 export const COLOR_GRAPPLE_LINE = 0xffffff;
 export const COLOR_RECOVERY = 0xff4444;
 export const COLOR_GOAL = 0xffd700;
+
+// Evolution
+export const COLOR_EVO_ITEM = 0x44ff88;
+
+// Gimmicks
+export const COLOR_FAKE_HOOK = 0xeedd44;       // Slightly different from normal hook
+export const COLOR_FAKE_HOOK_WARN = 0xff4444;
+export const COLOR_BREAKABLE = 0x887766;
+export const COLOR_BREAKABLE_WARN = 0xaa5533;
+export const COLOR_WIND_ZONE = 0x4488cc;
+export const FAKE_HOOK_DETACH_TIME = 1000;      // ms until fake hook detaches
+export const FAKE_HOOK_WARN_TIME = 600;         // ms when warning starts
+export const BREAKABLE_COLLAPSE_TIME = 800;     // ms until collapse
+export const BREAKABLE_WARN_TIME = 400;         // ms when warning starts
+export const BREAKABLE_RESPAWN_TIME = 5000;     // ms until respawn
