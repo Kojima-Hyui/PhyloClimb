@@ -178,6 +178,10 @@ export class EvolutionSelectUI {
     return a;
   }
 
+  isVisible(): boolean {
+    return this.container !== null;
+  }
+
   destroy(): void {
     this.close();
   }

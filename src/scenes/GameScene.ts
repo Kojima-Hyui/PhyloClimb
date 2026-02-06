@@ -159,6 +159,7 @@ export class GameScene extends Phaser.Scene {
 
   update(time: number, delta: number) {
     if (this.isDead) return;
+    if (this.evoSelectUI.isVisible()) return;
 
     this.handleSpaceKey();
     this.handleMovement();
@@ -396,6 +397,9 @@ export class GameScene extends Phaser.Scene {
 
     // Mouse click: fire/release grapple
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      // UIが開いている間はゲーム入力を無視
+      if (this.evoSelectUI.isVisible() || this.encyclopediaUI.isVisible()) return;
+
       if (this.isDead) {
         this.restartGame();
         return;

@@ -148,6 +148,10 @@ export class EncyclopediaUI {
     this.visible = false;
   }
 
+  isVisible(): boolean {
+    return this.visible;
+  }
+
   destroy(): void {
     this.hide();
   }
