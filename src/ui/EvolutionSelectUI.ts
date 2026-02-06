@@ -5,15 +5,17 @@ import * as C from '../constants';
 
 interface CardInfo {
   nodeId: EvolutionNodeId;
-  left: number; top: number; right: number; bottom: number;
+  cx: number;
+  cy: number;
+  w: number;
+  h: number;
   gfx: Phaser.GameObjects.Graphics;
   color: number;
 }
 
 /**
  * Card-based evolution selection overlay.
- * Pauses physics, shows available evolution choices, applies selection, resumes.
- * Uses scene-level pointer events to avoid container+scrollFactor hit-test issues.
+ * A/D: navigate, E: confirm, Esc: skip
  */
 export class EvolutionSelectUI {
   private scene: Phaser.Scene;
@@ -21,9 +23,8 @@ export class EvolutionSelectUI {
   private container: Phaser.GameObjects.Container | null = null;
   private onComplete: (() => void) | null = null;
   private cards: CardInfo[] = [];
-  private clickHandler: ((pointer: Phaser.Input.Pointer) => void) | null = null;
-  private escHandler: (() => void) | null = null;
-  private escKey: Phaser.Input.Keyboard.Key | null = null;
+  private selectedIndex = 0;
+  private keys: Phaser.Input.Keyboard.Key[] = [];
 
   constructor(scene: Phaser.Scene, evo: EvolutionSystem) {
     this.scene = scene;
@@ -34,6 +35,7 @@ export class EvolutionSelectUI {
     if (this.container) return;
     this.onComplete = onComplete;
     this.cards = [];
+    this.selectedIndex = 0;
 
     // Pause physics
     this.scene.matter.world.pause();
@@ -44,7 +46,6 @@ export class EvolutionSelectUI {
       return;
     }
 
-    // Pick up to 3 random choices
     const choices = this.shuffle(available).slice(0, 3);
 
     this.container = this.scene.add.container(0, 0).setDepth(200).setScrollFactor(0);
@@ -56,12 +57,11 @@ export class EvolutionSelectUI {
     this.container.add(bg);
 
     // Title
-    const title = this.scene.add.text(C.GAME_WIDTH / 2, 80, '進化を選べ', {
-      fontSize: '28px',
-      color: '#88ff88',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    this.container.add(title);
+    this.container.add(
+      this.scene.add.text(C.GAME_WIDTH / 2, 70, '進化を選べ', {
+        fontSize: '28px', color: '#88ff88', fontStyle: 'bold',
+      }).setOrigin(0.5)
+    );
 
     // Cards
     const cardW = 180;
@@ -77,50 +77,93 @@ export class EvolutionSelectUI {
       this.createCard(cx, cy, cardW, cardH, node, choices[i]);
     }
 
-    // Skip hint
-    const skip = this.scene.add.text(C.GAME_WIDTH / 2, C.GAME_HEIGHT - 50, 'Escでスキップ', {
-      fontSize: '13px',
-      color: '#aaaaaa',
-    }).setOrigin(0.5);
-    this.container.add(skip);
+    // Controls hint
+    this.container.add(
+      this.scene.add.text(C.GAME_WIDTH / 2, C.GAME_HEIGHT - 50, 'A/D: 選択  E: 決定  Esc: スキップ', {
+        fontSize: '14px', color: '#aaaaaa',
+      }).setOrigin(0.5)
+    );
 
-    // Scene-level click handler (uses screen coordinates, avoids container hit-test issues)
-    this.clickHandler = (pointer: Phaser.Input.Pointer) => {
-      if (!pointer.leftButtonDown()) return;
-      const sx = pointer.x;
-      const sy = pointer.y;
+    // Draw initial selection highlight
+    this.updateSelection();
 
-      for (const card of this.cards) {
-        if (sx >= card.left && sx <= card.right && sy >= card.top && sy <= card.bottom) {
-          this.evo.unlock(card.nodeId);
-          this.close();
-          return;
-        }
+    // Keyboard input
+    const kb = this.scene.input.keyboard!;
+    const keyA = kb.addKey(Phaser.Input.Keyboard.KeyCodes.A);
+    const keyD = kb.addKey(Phaser.Input.Keyboard.KeyCodes.D);
+    const keyLeft = kb.addKey(Phaser.Input.Keyboard.KeyCodes.LEFT);
+    const keyRight = kb.addKey(Phaser.Input.Keyboard.KeyCodes.RIGHT);
+    const keyE = kb.addKey(Phaser.Input.Keyboard.KeyCodes.E);
+    const keyEsc = kb.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
+
+    keyA.on('down', this.onLeft);
+    keyD.on('down', this.onRight);
+    keyLeft.on('down', this.onLeft);
+    keyRight.on('down', this.onRight);
+    keyE.on('down', this.onConfirm);
+    keyEsc.on('down', this.onSkip);
+
+    this.keys = [keyA, keyD, keyLeft, keyRight, keyE, keyEsc];
+  }
+
+  private onLeft = () => {
+    if (this.cards.length === 0) return;
+    this.selectedIndex = (this.selectedIndex - 1 + this.cards.length) % this.cards.length;
+    this.updateSelection();
+  };
+
+  private onRight = () => {
+    if (this.cards.length === 0) return;
+    this.selectedIndex = (this.selectedIndex + 1) % this.cards.length;
+    this.updateSelection();
+  };
+
+  private onConfirm = () => {
+    if (this.cards.length === 0) return;
+    const card = this.cards[this.selectedIndex];
+    this.evo.unlock(card.nodeId);
+    this.close();
+  };
+
+  private onSkip = () => {
+    this.close();
+  };
+
+  private updateSelection(): void {
+    for (let i = 0; i < this.cards.length; i++) {
+      const card = this.cards[i];
+      const selected = i === this.selectedIndex;
+      card.gfx.clear();
+
+      if (selected) {
+        card.gfx.fillStyle(0x2a2a4e, 0.95);
+        card.gfx.fillRoundedRect(card.cx - card.w / 2, card.cy - card.h / 2, card.w, card.h, 12);
+        card.gfx.lineStyle(3, card.color, 1);
+        card.gfx.strokeRoundedRect(card.cx - card.w / 2, card.cy - card.h / 2, card.w, card.h, 12);
+        // Selection arrow
+        card.gfx.fillStyle(0xffffff, 0.9);
+        card.gfx.fillTriangle(
+          card.cx, card.cy - card.h / 2 - 18,
+          card.cx - 8, card.cy - card.h / 2 - 28,
+          card.cx + 8, card.cy - card.h / 2 - 28,
+        );
+      } else {
+        card.gfx.fillStyle(0x1a1a2e, 0.95);
+        card.gfx.fillRoundedRect(card.cx - card.w / 2, card.cy - card.h / 2, card.w, card.h, 12);
+        card.gfx.lineStyle(2, card.color, 0.5);
+        card.gfx.strokeRoundedRect(card.cx - card.w / 2, card.cy - card.h / 2, card.w, card.h, 12);
       }
-    };
-    this.scene.input.on('pointerdown', this.clickHandler);
-
-    // ESC to skip
-    this.escKey = this.scene.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
-    this.escHandler = () => this.close();
-    this.escKey.on('down', this.escHandler);
+    }
   }
 
   private createCard(cx: number, cy: number, w: number, h: number, node: typeof evolutionTree[EvolutionNodeId], nodeId: EvolutionNodeId): void {
     if (!this.container) return;
 
-    const left = cx - w / 2;
-    const top = cy - h / 2;
-
     const gfx = this.scene.add.graphics();
-    gfx.fillStyle(0x1a1a2e, 0.95);
-    gfx.fillRoundedRect(left, top, w, h, 12);
-    gfx.lineStyle(2, node.color, 0.8);
-    gfx.strokeRoundedRect(left, top, w, h, 12);
     this.container.add(gfx);
 
     // Color orb
-    const orb = this.scene.add.circle(cx, top + 40, 20, node.color, 0.8);
+    const orb = this.scene.add.circle(cx, cy - h / 2 + 40, 20, node.color, 0.8);
     this.container.add(orb);
     this.scene.tweens.add({
       targets: orb,
@@ -143,31 +186,18 @@ export class EvolutionSelectUI {
       }).setOrigin(0.5)
     );
 
-    // "Select" label (visual only, not interactive)
-    this.container.add(
-      this.scene.add.text(cx, cy + h / 2 - 30, '▶ 選択', {
-        fontSize: '15px', color: '#88ff88', fontStyle: 'bold',
-      }).setOrigin(0.5)
-    );
-
-    // Register card hit area (screen coordinates)
-    this.cards.push({
-      nodeId, left, top, right: left + w, bottom: top + h,
-      gfx, color: node.color,
-    });
+    this.cards.push({ nodeId, cx, cy, w, h, gfx, color: node.color });
   }
 
   private close(): void {
-    // Remove event listeners
-    if (this.clickHandler) {
-      this.scene.input.off('pointerdown', this.clickHandler);
-      this.clickHandler = null;
+    // Remove key listeners
+    for (const key of this.keys) {
+      key.off('down', this.onLeft);
+      key.off('down', this.onRight);
+      key.off('down', this.onConfirm);
+      key.off('down', this.onSkip);
     }
-    if (this.escKey && this.escHandler) {
-      this.escKey.off('down', this.escHandler);
-      this.escHandler = null;
-      this.escKey = null;
-    }
+    this.keys = [];
 
     if (this.container) {
       this.container.destroy(true);
