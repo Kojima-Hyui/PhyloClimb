@@ -93,6 +93,14 @@ export class GameScene extends Phaser.Scene {
   // Victory state
   private goalReached: string = '';
 
+  // Dust respawn
+  private dustSpawnTimer: number = 0;
+  private readonly DUST_SPAWN_INTERVAL = 2000;  // ms between spawns
+  private readonly DUST_SPAWN_Y_MIN = 2880;     // ground area
+  private readonly DUST_SPAWN_Y_MAX = 2960;
+  private readonly DUST_SPAWN_X_MIN = 80;
+  private readonly DUST_SPAWN_X_MAX = 1520;
+
   constructor() {
     super({ key: 'GameScene' });
   }
@@ -120,6 +128,7 @@ export class GameScene extends Phaser.Scene {
     this.jumpChargeStart = 0;
     this.currentStretchFactor = 1.0;
     this.goalReached = '';
+    this.dustSpawnTimer = 0;
 
     this.encyclopediaSystem = new EncyclopediaSystem();
 
@@ -172,6 +181,7 @@ export class GameScene extends Phaser.Scene {
     this.handleSpaceKey(time);
     this.handleMovement();
     this.handleGrappleReel(_delta);
+    this.spawnDustTick(time);
     this.drawGrappleLine();
     this.drawAimIndicator();
     this.updateHookVisuals();
@@ -328,6 +338,70 @@ export class GameScene extends Phaser.Scene {
         sensorBody,
       });
     }
+  }
+
+  /** Periodically spawn dust on the ground floor so the player can always progress. */
+  private spawnDustTick(time: number) {
+    if (this.dustSpawnTimer === 0) {
+      this.dustSpawnTimer = time;
+      return;
+    }
+    if (time - this.dustSpawnTimer < this.DUST_SPAWN_INTERVAL) return;
+    this.dustSpawnTimer = time;
+
+    const ft = foodTypes['dust'];
+    const x = this.DUST_SPAWN_X_MIN + Math.random() * (this.DUST_SPAWN_X_MAX - this.DUST_SPAWN_X_MIN);
+    const y = this.DUST_SPAWN_Y_MIN + Math.random() * (this.DUST_SPAWN_Y_MAX - this.DUST_SPAWN_Y_MIN);
+
+    const glow = this.add.circle(x, y, ft.radius * 2.5, ft.glowColor, 0).setDepth(4);
+    const circle = this.add.circle(x, y, ft.radius, ft.color, 0).setDepth(5);
+
+    // Fade in
+    this.tweens.add({
+      targets: [circle],
+      alpha: 0.85,
+      duration: 400,
+    });
+    this.tweens.add({
+      targets: [glow],
+      alpha: 0.12,
+      duration: 400,
+    });
+
+    // Float animation
+    this.tweens.add({
+      targets: [circle, glow],
+      y: y - 4,
+      duration: 1200 + Math.random() * 600,
+      ease: 'Sine.easeInOut',
+      yoyo: true,
+      repeat: -1,
+    });
+
+    // Glow pulse
+    this.tweens.add({
+      targets: glow,
+      alpha: { from: 0.08, to: 0.25 },
+      duration: 900,
+      yoyo: true,
+      repeat: -1,
+      delay: 400,
+    });
+
+    const sensorBody = this.matter.add.rectangle(x, y, ft.radius * 4, ft.radius * 4, {
+      isStatic: true,
+      isSensor: true,
+      label: 'food',
+    }) as unknown as MatterJS.BodyType;
+
+    this.foodItemObjs.push({
+      x, y,
+      type: 'dust',
+      graphics: circle,
+      glow,
+      collected: false,
+      sensorBody,
+    });
   }
 
   private createGoals() {
