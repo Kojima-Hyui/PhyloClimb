@@ -52,7 +52,14 @@ export class EncyclopediaSystem {
   private load(): EncyclopediaData {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) return JSON.parse(raw) as EncyclopediaData;
+      if (raw) {
+        const parsed = JSON.parse(raw) as EncyclopediaData;
+        // Filter out old node IDs that no longer exist
+        parsed.discoveredNodes = parsed.discoveredNodes.filter(
+          (id) => ALL_NODE_IDS.includes(id as EvolutionNodeId)
+        );
+        return parsed;
+      }
     } catch { /* ignore corrupt data */ }
     return {
       discoveredNodes: [],

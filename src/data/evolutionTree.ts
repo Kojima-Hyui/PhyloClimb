@@ -1,98 +1,115 @@
 /**
- * Evolution Tree:
+ * Evolution Tree (Food-driven, 2 branches x 3 tiers):
  *
- *              [root: 原初適応]
- *              /               \
- *    [forelimb: 前肢強化]   [trunk: 体幹発達]
- *      /         \                |
- * [tendon: 腱の伸長] [grip: 把握力]  [shell: 外皮硬化]
- *                                    |
- *                              [sticky: 粘着器官]
+ *  Dust branch (伸長系):
+ *    stretch_1 (伸長I, 10pt) → stretch_2 (伸長II, 25pt) → sticky_1 (粘着I, 50pt)
  *
- * Left branch (forelimb) = offensive/skill-dependent
- * Right branch (trunk) = defensive/stability
+ *  Sap branch (跳躍系):
+ *    jump_1 (跳躍I, 10pt) → jump_2 (跳躍II, 25pt) → traction_1 (牽引I, 50pt)
  */
 
-export type EvolutionNodeId = 'root' | 'forelimb' | 'trunk' | 'tendon' | 'grip' | 'shell' | 'sticky';
+import { FoodTypeId } from './foodTypes';
+
+export type EvolutionNodeId =
+  | 'stretch_1' | 'stretch_2' | 'sticky_1'
+  | 'jump_1' | 'jump_2' | 'traction_1';
 
 export interface EvolutionEffects {
-  grappleRange?: number;
-  maxHp?: number;
-  reelSpeed?: number;
-  airControl?: number;
-  momentumRetention?: number;  // fraction: 0.3 = 30%
-  fallDamageReduction?: number; // fraction: 0.3 = 30%
-  stickyWalls?: boolean;
+  bodyStretchFactor?: number;   // multiplier for body height
+  friction?: number;            // surface friction override
+  canJump?: boolean;            // unlocks basic jump
+  canChargedJump?: boolean;     // unlocks charged jump
+  canGrapple?: boolean;         // unlocks grapple
+  grappleRange?: number;        // grapple range in px
 }
 
 export interface EvolutionNode {
   id: EvolutionNodeId;
   name: string;
   description: string;
-  parent: EvolutionNodeId | null;
+  branch: FoodTypeId;
+  tier: number;                 // 1, 2, or 3
+  threshold: number;            // food points required
   effects: EvolutionEffects;
   color: number;
+  prev: EvolutionNodeId | null; // previous tier in same branch
 }
 
 export type EvolutionTree = Record<EvolutionNodeId, EvolutionNode>;
 
 export const evolutionTree: EvolutionTree = {
-  root: {
-    id: 'root',
-    name: '原初適応',
-    description: '射程+50, HP+10',
-    parent: null,
-    effects: { grappleRange: 50, maxHp: 10 },
-    color: 0x88ff88,
+  // ---- Dust branch ----
+  stretch_1: {
+    id: 'stretch_1',
+    name: '伸長I',
+    description: '体が1.5倍に伸びる',
+    branch: 'dust',
+    tier: 1,
+    threshold: 10,
+    effects: { bodyStretchFactor: 1.5 },
+    color: 0xccccbb,
+    prev: null,
   },
-  forelimb: {
-    id: 'forelimb',
-    name: '前肢強化',
-    description: 'リール速度+1.5',
-    parent: 'root',
-    effects: { reelSpeed: 1.5 },
-    color: 0xff8844,
+  stretch_2: {
+    id: 'stretch_2',
+    name: '伸長II',
+    description: '体が2.0倍に伸びる',
+    branch: 'dust',
+    tier: 2,
+    threshold: 25,
+    effects: { bodyStretchFactor: 2.0 },
+    color: 0xaabb99,
+    prev: 'stretch_1',
   },
-  trunk: {
-    id: 'trunk',
-    name: '体幹発達',
-    description: '空中制御+0.002',
-    parent: 'root',
-    effects: { airControl: 0.002 },
-    color: 0x4488ff,
+  sticky_1: {
+    id: 'sticky_1',
+    name: '粘着I',
+    description: '摩擦力が大幅に上がる',
+    branch: 'dust',
+    tier: 3,
+    threshold: 50,
+    effects: { friction: 0.95 },
+    color: 0x88aa77,
+    prev: 'stretch_2',
   },
-  tendon: {
-    id: 'tendon',
-    name: '腱の伸長',
-    description: '射程+100',
-    parent: 'forelimb',
-    effects: { grappleRange: 100 },
-    color: 0xffaa44,
+
+  // ---- Sap branch ----
+  jump_1: {
+    id: 'jump_1',
+    name: '跳躍I',
+    description: 'ジャンプが可能になる',
+    branch: 'sap',
+    tier: 1,
+    threshold: 10,
+    effects: { canJump: true },
+    color: 0xddaa44,
+    prev: null,
   },
-  grip: {
-    id: 'grip',
-    name: '把握力',
-    description: '運動量維持+30%',
-    parent: 'forelimb',
-    effects: { momentumRetention: 0.3 },
-    color: 0xff6644,
+  jump_2: {
+    id: 'jump_2',
+    name: '跳躍II',
+    description: '溜めジャンプが可能になる',
+    branch: 'sap',
+    tier: 2,
+    threshold: 25,
+    effects: { canChargedJump: true },
+    color: 0xcc8833,
+    prev: 'jump_1',
   },
-  shell: {
-    id: 'shell',
-    name: '外皮硬化',
-    description: '落下ダメージ-30%, HP+15',
-    parent: 'trunk',
-    effects: { fallDamageReduction: 0.3, maxHp: 15 },
-    color: 0x6688ff,
-  },
-  sticky: {
-    id: 'sticky',
-    name: '粘着器官',
-    description: '壁張り付き強化',
-    parent: 'shell',
-    effects: { stickyWalls: true },
-    color: 0x44aaff,
+  traction_1: {
+    id: 'traction_1',
+    name: '牽引I',
+    description: 'グラップル発射が可能になる',
+    branch: 'sap',
+    tier: 3,
+    threshold: 50,
+    effects: { canGrapple: true, grappleRange: 200 },
+    color: 0xbb6622,
+    prev: 'jump_2',
   },
 };
 
-export const ALL_NODE_IDS: EvolutionNodeId[] = ['root', 'forelimb', 'trunk', 'tendon', 'grip', 'shell', 'sticky'];
+export const ALL_NODE_IDS: EvolutionNodeId[] = [
+  'stretch_1', 'stretch_2', 'sticky_1',
+  'jump_1', 'jump_2', 'traction_1',
+];

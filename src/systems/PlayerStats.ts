@@ -1,68 +1,59 @@
 import * as C from '../constants';
-import { EvolutionSystem } from './EvolutionSystem';
-import { evolutionTree } from '../data/evolutionTree';
+import { FeedingSystem } from './FeedingSystem';
 
 /**
- * Resolves effective player stats by layering evolution bonuses on top of base constants.
- * Read stats from here instead of constants directly so evolution effects apply.
+ * Derives effective player stats from FeedingSystem evolution state.
  */
 export class PlayerStats {
-  constructor(private evo: EvolutionSystem) {}
+  constructor(private feeding: FeedingSystem) {}
 
+  /** Body stretch multiplier (1.0 = normal sphere). */
+  get bodyStretchFactor(): number {
+    if (this.feeding.isActive('stretch_2')) return 2.0;
+    if (this.feeding.isActive('stretch_1')) return 1.5;
+    return 1.0;
+  }
+
+  /** Surface friction. */
+  get friction(): number {
+    if (this.feeding.isActive('sticky_1')) return 0.95;
+    return 0.1;
+  }
+
+  /** Whether basic jump is unlocked. */
+  get canJump(): boolean {
+    return this.feeding.isActive('jump_1');
+  }
+
+  /** Whether charged jump is unlocked. */
+  get canChargedJump(): boolean {
+    return this.feeding.isActive('jump_2');
+  }
+
+  /** Whether grapple is unlocked. */
+  get canGrapple(): boolean {
+    return this.feeding.isActive('traction_1');
+  }
+
+  /** Grapple range (0 if not unlocked). */
   get grappleRange(): number {
-    let v = C.GRAPPLE_RANGE;
-    if (this.evo.isUnlocked('root')) v += evolutionTree.root.effects.grappleRange!;
-    if (this.evo.isUnlocked('tendon')) v += evolutionTree.tendon.effects.grappleRange!;
-    return v;
-  }
-
-  get airControl(): number {
-    let v = C.PLAYER_AIR_CONTROL;
-    if (this.evo.isUnlocked('trunk')) v += evolutionTree.trunk.effects.airControl!;
-    return v;
-  }
-
-  get reelSpeed(): number {
-    let v = C.REEL_SPEED;
-    if (this.evo.isUnlocked('forelimb')) v += evolutionTree.forelimb.effects.reelSpeed!;
-    return v;
+    if (!this.canGrapple) return 0;
+    return C.GRAPPLE_RANGE;
   }
 
   get maxHp(): number {
-    let v = C.MAX_HP;
-    if (this.evo.isUnlocked('root')) v += evolutionTree.root.effects.maxHp!;
-    if (this.evo.isUnlocked('shell')) v += evolutionTree.shell.effects.maxHp!;
-    return v;
+    return C.MAX_HP;
   }
 
-  get fallThresholdSmall(): number {
-    return C.FALL_THRESHOLD_SMALL;
-  }
-
-  get fallThresholdMedium(): number {
-    return C.FALL_THRESHOLD_MEDIUM;
-  }
-
-  get fallThresholdLarge(): number {
-    return C.FALL_THRESHOLD_LARGE;
-  }
-
-  /** Fall damage multiplier (1.0 = normal, 0.7 = 30% reduction) */
   get fallDamageMultiplier(): number {
-    let v = 1.0;
-    if (this.evo.isUnlocked('shell')) v *= (1 - evolutionTree.shell.effects.fallDamageReduction!);
-    return v;
+    return 1.0;
   }
 
-  /** Momentum retention on grapple release (0 = none, 0.3 = 30% bonus) */
-  get momentumRetention(): number {
-    let v = 0;
-    if (this.evo.isUnlocked('grip')) v += evolutionTree.grip.effects.momentumRetention!;
-    return v;
+  get airControl(): number {
+    return C.PLAYER_AIR_CONTROL;
   }
 
-  /** Whether sticky wall-cling is active */
-  get stickyWalls(): boolean {
-    return this.evo.isUnlocked('sticky');
+  get reelSpeed(): number {
+    return C.REEL_SPEED;
   }
 }

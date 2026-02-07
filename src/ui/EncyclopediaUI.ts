@@ -1,11 +1,11 @@
 import Phaser from 'phaser';
 import { EncyclopediaSystem } from '../systems/EncyclopediaSystem';
-import { evolutionTree, ALL_NODE_IDS, EvolutionNodeId } from '../data/evolutionTree';
+import { evolutionTree, EvolutionNodeId } from '../data/evolutionTree';
 import * as C from '../constants';
 
 /**
  * Encyclopedia overlay toggled with Tab key.
- * Shows discovered evolution nodes and run statistics.
+ * Shows 2-branch x 3-node evolution tree and run statistics.
  */
 export class EncyclopediaUI {
   private scene: Phaser.Scene;
@@ -19,8 +19,6 @@ export class EncyclopediaUI {
 
     const tabKey = scene.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.TAB);
     tabKey.on('down', () => this.toggle());
-
-    // Prevent Tab from tabbing out of game
     scene.input.keyboard!.addCapture(Phaser.Input.Keyboard.KeyCodes.TAB);
   }
 
@@ -62,7 +60,7 @@ export class EncyclopediaUI {
       }).setOrigin(0.5)
     );
 
-    // Evolution tree visualization
+    // Draw 2-branch tree
     this.drawTree(data.discoveredNodes);
 
     // Close hint
@@ -76,62 +74,93 @@ export class EncyclopediaUI {
   private drawTree(discovered: EvolutionNodeId[]): void {
     if (!this.container) return;
 
-    // Node positions in the tree layout
-    const positions: Record<EvolutionNodeId, { x: number; y: number }> = {
-      root:     { x: 400, y: 140 },
-      forelimb: { x: 250, y: 230 },
-      trunk:    { x: 550, y: 230 },
-      tendon:   { x: 170, y: 320 },
-      grip:     { x: 330, y: 320 },
-      shell:    { x: 550, y: 320 },
-      sticky:   { x: 550, y: 410 },
-    };
-
     const gfx = this.scene.add.graphics();
     this.container.add(gfx);
 
-    // Draw edges
-    for (const id of ALL_NODE_IDS) {
-      const node = evolutionTree[id];
-      if (node.parent) {
-        const from = positions[node.parent];
-        const to = positions[id];
-        const bothDiscovered = discovered.includes(id) && discovered.includes(node.parent);
+    // Branch layout: two horizontal rows
+    const dustBranch: EvolutionNodeId[] = ['stretch_1', 'stretch_2', 'sticky_1'];
+    const sapBranch: EvolutionNodeId[] = ['jump_1', 'jump_2', 'traction_1'];
+
+    const branchStartX = 180;
+    const nodeSpacing = 160;
+    const dustY = 180;
+    const sapY = 340;
+    const nodeRadius = 24;
+
+    // Branch labels
+    this.container.add(
+      this.scene.add.text(80, dustY, '塵\n(Dust)', {
+        fontSize: '14px', color: '#ccccbb', align: 'center',
+      }).setOrigin(0.5)
+    );
+    this.container.add(
+      this.scene.add.text(80, sapY, '液\n(Sap)', {
+        fontSize: '14px', color: '#ddaa44', align: 'center',
+      }).setOrigin(0.5)
+    );
+
+    // Draw branches
+    this.drawBranch(gfx, dustBranch, discovered, branchStartX, dustY, nodeSpacing, nodeRadius);
+    this.drawBranch(gfx, sapBranch, discovered, branchStartX, sapY, nodeSpacing, nodeRadius);
+  }
+
+  private drawBranch(
+    gfx: Phaser.GameObjects.Graphics,
+    nodes: EvolutionNodeId[],
+    discovered: EvolutionNodeId[],
+    startX: number,
+    y: number,
+    spacing: number,
+    radius: number,
+  ): void {
+    for (let i = 0; i < nodes.length; i++) {
+      const nodeId = nodes[i];
+      const node = evolutionTree[nodeId];
+      const x = startX + i * spacing;
+      const isDiscovered = discovered.includes(nodeId);
+
+      // Edge to next node
+      if (i < nodes.length - 1) {
+        const nextX = startX + (i + 1) * spacing;
+        const nextDiscovered = discovered.includes(nodes[i + 1]);
+        const bothDiscovered = isDiscovered && nextDiscovered;
         gfx.lineStyle(2, bothDiscovered ? 0x88ff88 : 0x444444, bothDiscovered ? 0.6 : 0.3);
         gfx.beginPath();
-        gfx.moveTo(from.x, from.y);
-        gfx.lineTo(to.x, to.y);
+        gfx.moveTo(x + radius, y);
+        gfx.lineTo(nextX - radius, y);
         gfx.strokePath();
       }
-    }
 
-    // Draw nodes
-    for (const id of ALL_NODE_IDS) {
-      const node = evolutionTree[id];
-      const pos = positions[id];
-      const isDiscovered = discovered.includes(id);
-
-      // Circle
+      // Node circle
       const color = isDiscovered ? node.color : 0x333333;
       const alpha = isDiscovered ? 0.9 : 0.4;
       gfx.fillStyle(color, alpha);
-      gfx.fillCircle(pos.x, pos.y, 22);
+      gfx.fillCircle(x, y, radius);
       gfx.lineStyle(2, isDiscovered ? 0xffffff : 0x555555, 0.5);
-      gfx.strokeCircle(pos.x, pos.y, 22);
+      gfx.strokeCircle(x, y, radius);
 
-      // Name
+      // Threshold text inside circle
+      this.container!.add(
+        this.scene.add.text(x, y - 2, `${node.threshold}`, {
+          fontSize: '11px',
+          color: isDiscovered ? '#ffffff' : '#888888',
+          fontStyle: 'bold',
+        }).setOrigin(0.5)
+      );
+
+      // Name below
       const nameText = isDiscovered ? node.name : '???';
       this.container!.add(
-        this.scene.add.text(pos.x, pos.y + 30, nameText, {
-          fontSize: '12px',
+        this.scene.add.text(x, y + radius + 12, nameText, {
+          fontSize: '13px',
           color: isDiscovered ? '#ffffff' : '#666666',
         }).setOrigin(0.5)
       );
 
-      // Description (only if discovered)
+      // Description
       if (isDiscovered) {
         this.container!.add(
-          this.scene.add.text(pos.x, pos.y + 45, node.description, {
+          this.scene.add.text(x, y + radius + 28, node.description, {
             fontSize: '10px',
             color: '#aaaaaa',
           }).setOrigin(0.5)

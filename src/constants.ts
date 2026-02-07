@@ -3,18 +3,22 @@ export const GAME_WIDTH = 800;
 export const GAME_HEIGHT = 600;
 
 // World
-export const WORLD_WIDTH = 800;
-export const WORLD_HEIGHT = 4000;
+export const WORLD_WIDTH = 1600;
+export const WORLD_HEIGHT = 3000;
 
 // Player
 export const PLAYER_RADIUS = 15;
 export const PLAYER_MOVE_FORCE = 0.005;
 export const PLAYER_AIR_CONTROL = 0.003;
 export const PLAYER_MAX_VELOCITY = 8;
-export const PLAYER_JUMP_VELOCITY = -10;
+export const PLAYER_JUMP_VELOCITY = -8;
 
-// Grapple
-export const GRAPPLE_RANGE = 400;
+// Charged jump
+export const JUMP_CHARGE_MAX_MS = 600;
+export const JUMP_CHARGE_MULTIPLIER = 0.8;
+
+// Grapple (unlocked via traction_1 evolution)
+export const GRAPPLE_RANGE = 200;
 export const GRAPPLE_AIM_CONE = Math.PI / 3; // 60 degrees
 export const GRAPPLE_STIFFNESS = 0.04;
 export const GRAPPLE_DAMPING = 0.01;
@@ -37,18 +41,10 @@ export const COLOR_WALL = 0x333355;
 export const COLOR_GRAPPLE_LINE = 0xffffff;
 export const COLOR_RECOVERY = 0xff4444;
 export const COLOR_GOAL = 0xffd700;
+export const COLOR_GOAL_FAR = 0xff8800;
 
-// Evolution
-export const COLOR_EVO_ITEM = 0x44ff88;
-
-// Gimmicks
-export const COLOR_FAKE_HOOK = 0xeedd44;       // Slightly different from normal hook
-export const COLOR_FAKE_HOOK_WARN = 0xff4444;
-export const COLOR_BREAKABLE = 0x887766;
-export const COLOR_BREAKABLE_WARN = 0xaa5533;
-export const COLOR_WIND_ZONE = 0x4488cc;
-export const FAKE_HOOK_DETACH_TIME = 1000;      // ms until fake hook detaches
-export const FAKE_HOOK_WARN_TIME = 600;         // ms when warning starts
-export const BREAKABLE_COLLAPSE_TIME = 800;     // ms until collapse
-export const BREAKABLE_WARN_TIME = 400;         // ms when warning starts
-export const BREAKABLE_RESPAWN_TIME = 5000;     // ms until respawn
+// Food colors
+export const COLOR_DUST = 0xccccbb;
+export const COLOR_DUST_GLOW = 0xeeeecc;
+export const COLOR_SAP = 0xddaa44;
+export const COLOR_SAP_GLOW = 0xffcc66;
