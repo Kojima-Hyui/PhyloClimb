@@ -172,10 +172,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(time: number, _delta: number) {
-    if (this.isDead) {
-      if (this.keyR.isDown) this.restartGame();
+    if (this.keyR.isDown) {
+      this.restartGame();
       return;
     }
+    if (this.isDead) return;
     if (this.encyclopediaUI.isVisible()) return;
 
     this.handleSpaceKey(time);
@@ -936,12 +937,16 @@ export class GameScene extends Phaser.Scene {
     // Replace physics body: pill shape using rectangle with chamfer
     const w = C.PLAYER_RADIUS * 2;
     const h = Math.round(C.PLAYER_RADIUS * 2 * newStretch);
-    const chamfer = C.PLAYER_RADIUS * 0.9;
+    const chamfer = C.PLAYER_RADIUS * 0.8;
+
+    // Lift player up so the taller body doesn't clip into the ground
+    const heightDiff = (h - C.PLAYER_RADIUS * 2 * this.currentStretchFactor) / 2;
+    const newY = oldY - heightDiff - 2;
 
     // Remove old body and create new one
     this.matter.world.remove(body);
 
-    const newBody = MatterLib.Bodies.rectangle(oldX, oldY, w, h, {
+    const newBody = MatterLib.Bodies.rectangle(oldX, newY, w, h, {
       chamfer: { radius: chamfer },
       label: 'player',
       friction: this.stats.friction,
@@ -951,7 +956,7 @@ export class GameScene extends Phaser.Scene {
 
     this.player.setExistingBody(newBody as any);
     this.player.setFixedRotation();
-    this.player.setPosition(oldX, oldY);
+    this.player.setPosition(oldX, newY);
     MatterLib.Body.setVelocity(newBody, { x: oldVx, y: oldVy });
 
     this.currentStretchFactor = newStretch;

@@ -37,21 +37,18 @@ export interface GoalDef {
 // ============ Platforms ============
 
 export const platforms: PlatformDef[] = [
-  // Section 1: 始まりの平地 (Y 2800-3000)
+  // Section 1: 始まりの平地 (Y 2800-3000) — flat ground only
   { x: 800, y: 2980, w: 1600, h: 40 },   // Ground floor (full width)
-  { x: 400, y: 2920, w: 200, h: 16 },     // Gentle ramp step
-  { x: 900, y: 2900, w: 250, h: 16 },     // Gentle ramp step
-  { x: 1300, y: 2880, w: 180, h: 16 },    // Gentle ramp step
 
-  // Section 2: 低い段差 (Y 2400-2800) — 25-35px steps
-  { x: 300, y: 2750, w: 200, h: 16 },
-  { x: 650, y: 2720, w: 180, h: 16 },
-  { x: 1000, y: 2680, w: 200, h: 16 },
-  { x: 1350, y: 2640, w: 180, h: 16 },
-  { x: 800, y: 2580, w: 250, h: 16 },
-  { x: 400, y: 2520, w: 200, h: 16 },
-  { x: 1100, y: 2480, w: 200, h: 16 },
-  { x: 700, y: 2430, w: 250, h: 16 },
+  // Section 2: 低い段差 (Y 2400-2800) — gentle slopes, wide platforms
+  { x: 400, y: 2820, w: 350, h: 16 },     // Ramp from ground
+  { x: 1000, y: 2780, w: 400, h: 16 },
+  { x: 500, y: 2720, w: 350, h: 16 },
+  { x: 1200, y: 2660, w: 350, h: 16 },
+  { x: 700, y: 2600, w: 400, h: 16 },
+  { x: 300, y: 2530, w: 350, h: 16 },
+  { x: 1100, y: 2470, w: 350, h: 16 },
+  { x: 700, y: 2410, w: 400, h: 16 },
 
   // Section 3: 高い段差 (Y 2000-2400) — 40-50px steps
   { x: 350, y: 2350, w: 180, h: 16 },
