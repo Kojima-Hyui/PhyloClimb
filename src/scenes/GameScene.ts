@@ -354,19 +354,18 @@ export class GameScene extends Phaser.Scene {
     const x = this.DUST_SPAWN_X_MIN + Math.random() * (this.DUST_SPAWN_X_MAX - this.DUST_SPAWN_X_MIN);
     const y = this.DUST_SPAWN_Y_MIN + Math.random() * (this.DUST_SPAWN_Y_MAX - this.DUST_SPAWN_Y_MIN);
 
-    const glow = this.add.circle(x, y, ft.radius * 2.5, ft.glowColor, 0).setDepth(4);
-    const circle = this.add.circle(x, y, ft.radius, ft.color, 0).setDepth(5);
+    const glow = this.add.circle(x, y, ft.radius * 2.5, ft.glowColor, 0.12).setDepth(4);
+    const circle = this.add.circle(x, y, ft.radius, ft.color, 0.85).setDepth(5);
 
-    // Fade in
+    // Pop-in animation
+    circle.setScale(0);
+    glow.setScale(0);
     this.tweens.add({
-      targets: [circle],
-      alpha: 0.85,
-      duration: 400,
-    });
-    this.tweens.add({
-      targets: [glow],
-      alpha: 0.12,
-      duration: 400,
+      targets: [circle, glow],
+      scaleX: 1,
+      scaleY: 1,
+      duration: 300,
+      ease: 'Back.easeOut',
     });
 
     // Float animation
@@ -386,7 +385,6 @@ export class GameScene extends Phaser.Scene {
       duration: 900,
       yoyo: true,
       repeat: -1,
-      delay: 400,
     });
 
     const sensorBody = this.matter.add.rectangle(x, y, ft.radius * 4, ft.radius * 4, {
